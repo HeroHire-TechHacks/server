@@ -21,6 +21,7 @@ const { generateOTP } = require('./src/utils/randomStringGenerator');
 const Otp = require('./src/schema/otps');
 const { sendEmail } = require('./src/utils/sendEmail');
 const { verifyAuth } = require('./src/utils/authMiddleware');
+const { createMeet, startMeet, endMeet } = require('./src/dals/meets');
 
 const app = express();
 
@@ -294,6 +295,83 @@ app.get('/details', verifyAuth, async (_, res) => {
 		message: 'Success',
 		data: jobDetails,
 	});
+});
+
+app.post('/create-meet', verifyAuth, async (req, res) => {
+	const userId = req.user.id;
+
+	const meetDetailsResponse = await createMeet(userId);
+
+	if (meetDetailsResponse.error) {
+		return res.status(400).json({
+			error: true,
+			message: 'Some error! Please try again later.',
+			data: null,
+		});
+	}
+
+	const meetDetails = meetDetailsResponse.data;
+
+	return res.status(200).json({
+		error: false,
+		message: 'Success',
+		data: meetDetails.meetCode,
+	});
+});
+
+app.post('/end-meet', verifyAuth, async (req, res) => {
+	const userId = req.user.id;
+	let { meetCode, meetEndReason } = req.body;
+
+	meetCode = typeof meetCode === 'string' && meetCode?.trim();
+
+	meetEndReason = typeof meetEndReason === 'string' && meetEndReason.trim();
+
+	if (!meetCode) {
+		return res.status(400).json({
+			error: true,
+			message: 'Some error. Please try again later.',
+			data: null,
+		});
+	}
+
+	if (!meetEndReason) {
+		return res.status(400).json({
+			error: true,
+			message: 'Meet end reason is required.',
+			data: null,
+		});
+	}
+
+	const meetDetailsResponse = await endMeet(userId, meetCode, meetEndReason);
+
+	if (meetDetailsResponse.error) {
+		return res.status(400).json(meetDetailsResponse);
+	}
+
+	return res.status(200).json({
+		error: false,
+		message: 'Success',
+		data: null,
+	});
+});
+
+app.post('/start-meet', verifyAuth, async (req, res) => {
+	let { meetCode } = req.body;
+
+	meetCode = typeof meetCode === 'string' && meetCode?.trim();
+
+	if (!meetCode) {
+		return res.status(400).json({
+			error: true,
+			message: 'Some error. Please try again later.',
+			data: null,
+		});
+	}
+
+	const response = await startMeet(req.user, meetCode);
+
+	return res.status(response.error ? 400 : 200).json(response);
 });
 
 app.use((err, _req, res, _next) => {
