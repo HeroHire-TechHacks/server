@@ -8,7 +8,7 @@ const openai = new OpenAI({
 const generateAIResponse = async (chatMessages) => {
 	try {
 		const completion = await openai.chat.completions.create({
-			model: 'gpt-3.5-turbo-16k',
+			model: 'gpt-3.5-turbo',
 			messages: [
 				{
 					role: 'system',
@@ -18,7 +18,7 @@ const generateAIResponse = async (chatMessages) => {
 				...chatMessages,
 			],
 			temperature: 0.7,
-			max_tokens: 100,
+			max_tokens: 60,
 			top_p: 0.6,
 			frequency_penalty: 0,
 			presence_penalty: 0.3,
@@ -51,6 +51,7 @@ async function convertTextToAudioV2(sentenceToSpeak) {
 		model: 'tts-1',
 		voice: 'alloy',
 		input: sentenceToSpeak,
+		speed: 1.1,
 	});
 
 	const buffer = Buffer.from(await speech.arrayBuffer());
