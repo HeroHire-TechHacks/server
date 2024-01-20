@@ -6,6 +6,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const bodyParser = require('body-parser');
+const { rateLimiter } = require('./src/utils/rateLimitMiddleware');
 
 const app = express();
 
@@ -26,6 +27,8 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/favicon.ico', (req, res) => {
 	res.status(204).end();
 });
+
+app.use(rateLimiter);
 
 app.get('/', (_, res) => {
 	res.json({
