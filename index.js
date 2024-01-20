@@ -9,6 +9,9 @@ const bodyParser = require('body-parser');
 const { rateLimiter } = require('./src/utils/rateLimitMiddleware');
 const { errorLogger } = require('./src/utils/logErrors');
 const { connectDB } = require('./src/utils/mongoUtils');
+const {
+	networkLoggerMiddleware,
+} = require('./src/utils/networkLoggerMiddleware');
 
 const app = express();
 
@@ -23,6 +26,8 @@ app.use(
 );
 app.use(bodyParser.json({ limit: '5mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
+
+networkLoggerMiddleware(app);
 
 connectDB();
 
