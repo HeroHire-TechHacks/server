@@ -20,6 +20,7 @@ const {
 const { generateOTP } = require('./src/utils/randomStringGenerator');
 const Otp = require('./src/schema/otps');
 const { sendEmail } = require('./src/utils/sendEmail');
+const { verifyAuth } = require('./src/utils/authMiddleware');
 
 const app = express();
 
@@ -284,6 +285,14 @@ app.post('/verify-otp', async (req, res) => {
 		error: false,
 		message: 'User verified',
 		data: user.userToken,
+	});
+});
+
+app.get('/details', verifyAuth, async (_, res) => {
+	return res.status(200).json({
+		error: false,
+		message: 'Success',
+		data: jobDetails,
 	});
 });
 
