@@ -7,6 +7,8 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const bodyParser = require('body-parser');
 const { rateLimiter } = require('./src/utils/rateLimitMiddleware');
+const { errorLogger } = require('./src/utils/logErrors');
+const { connectDB } = require('./src/utils/mongoUtils');
 
 const app = express();
 
@@ -22,6 +24,8 @@ app.use(
 app.use(bodyParser.json({ limit: '5mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
 
+connectDB();
+
 // Routes
 
 app.use('/favicon.ico', (req, res) => {
@@ -35,6 +39,15 @@ app.get('/', (_, res) => {
 		error: false,
 		message: 'Welcome to the HeroHire!',
 		data: null,
+	});
+});
+
+app.use((err, _req, res, _next) => {
+	errorLogger(err);
+	res.status(500).json({
+		error: true,
+		data: null,
+		message: 'Some error! Please try again later.',
 	});
 });
 
