@@ -12,6 +12,14 @@ const { connectDB } = require('./src/utils/mongoUtils');
 const {
 	networkLoggerMiddleware,
 } = require('./src/utils/networkLoggerMiddleware');
+const {
+	getUserByEmail,
+	createNewUser,
+	updateUser,
+} = require('./src/dals/users');
+const { generateOTP } = require('./src/utils/randomStringGenerator');
+const Otp = require('./src/schema/otps');
+const { sendEmail } = require('./src/utils/sendEmail');
 
 const app = express();
 
@@ -44,6 +52,238 @@ app.get('/', (_, res) => {
 		error: false,
 		message: 'Welcome to the HeroHire!',
 		data: null,
+	});
+});
+
+app.post('/login', async (req, res) => {
+	let { email, name } = req.body;
+
+	email = typeof email === 'string' && email?.trim().toLowerCase();
+
+	// regex validate email
+	const emailRegex = /\S+@\S+\.\S+/;
+
+	if (!emailRegex.test(email)) {
+		return res.status(400).json({
+			error: true,
+			message: 'Invalid email',
+			data: null,
+		});
+	}
+
+	if (!email) {
+		return res.status(400).json({
+			error: true,
+			message: 'Email is required',
+			data: null,
+		});
+	}
+
+	if (email.length < 5 || email.length > 50) {
+		return res.status(400).json({
+			error: true,
+			message: 'Invalid email',
+			data: null,
+		});
+	}
+
+	name = typeof name === 'string' && name?.trim();
+
+	if (!name) {
+		return res.status(400).json({
+			error: true,
+			message: 'Name is required',
+			data: null,
+		});
+	}
+
+	if (name.length < 3 || name.length > 30) {
+		return res.status(400).json({
+			error: true,
+			message: 'Invalid name',
+			data: null,
+		});
+	}
+
+	const userResponse = await getUserByEmail(email);
+
+	if (userResponse.error) {
+		return res.status(500).json(userResponse);
+	}
+
+	const user = userResponse.data;
+
+	if (!user) {
+		const newUserResponse = await createNewUser(email, name);
+
+		if (newUserResponse.error) {
+			return res.status(400).json(newUserResponse);
+		}
+
+		const otpCode = await generateOTP(6);
+
+		const saveOtpInDb = await Otp.create({
+			email,
+			otp: otpCode,
+		});
+
+		if (!saveOtpInDb) {
+			return res.status(400).json({
+				error: true,
+				message: 'Some error! Please try again later.',
+				data: null,
+			});
+		}
+
+		sendEmail(email, otpCode);
+
+		return res.status(200).json({
+			error: false,
+			message: 'Success',
+			data: 'email_sent',
+		});
+	} else {
+		if (user.verified) {
+			const updatedUserResponse = await updateUser(email, name, user.verified);
+
+			if (updatedUserResponse.error) {
+				return res.status(400).json(updatedUserResponse);
+			}
+
+			const updatedUser = updatedUserResponse.data;
+
+			return res.status(200).json({
+				error: false,
+				message: 'Success',
+				data: updatedUser.userToken,
+			});
+		} else {
+			// user exists but not verified
+			// check if email was sent in last 10 minutes
+			const checkOtpResponse = await Otp.findOne({
+				email,
+				createdAt: {
+					$gte: new Date(Date.now() - 10 * 60 * 1000),
+				},
+			});
+
+			if (checkOtpResponse) {
+				return res.status(400).json({
+					error: false,
+					message: 'Email already sent',
+					data: 'email_already_sent',
+				});
+			}
+
+			const otpCode = await generateOTP(6);
+
+			const saveOtpInDb = await Otp.create({
+				email,
+				otp: otpCode,
+			});
+
+			if (!saveOtpInDb) {
+				return res.status(400).json({
+					error: true,
+					message: 'Some error! Please try again later.',
+					data: null,
+				});
+			}
+
+			sendEmail(email, otpCode);
+
+			return res.status(200).json({
+				error: false,
+				message: 'Success',
+				data: 'email_sent',
+			});
+		}
+	}
+});
+
+app.post('/verify-otp', async (req, res) => {
+	let { email, otp } = req.body;
+
+	otp = typeof otp === 'string' && otp?.trim();
+
+	if (!otp || otp.length !== 6) {
+		return res.status(400).json({
+			error: true,
+			message: 'OTP is invalid',
+			data: null,
+		});
+	}
+
+	email = typeof email === 'string' && email?.trim().toLowerCase();
+
+	// regex validate email
+	const emailRegex = /\S+@\S+\.\S+/;
+
+	if (!email || !emailRegex.test(email)) {
+		return res.status(400).json({
+			error: true,
+			message: 'Invalid email',
+			data: null,
+		});
+	}
+
+	const userResponse = await getUserByEmail(email);
+
+	if (userResponse.error) {
+		return res.status(500).json(userResponse);
+	}
+
+	const user = userResponse.data;
+
+	if (!user) {
+		return res.status(200).json({
+			error: true,
+			message: 'Invalid Email',
+			data: null,
+		});
+	}
+
+	if (user.verified) {
+		return res.status(400).json({
+			error: true,
+			data: null,
+			message: 'User already verified',
+		});
+	}
+
+	// get latest otp from the records by createdAt
+	const latestOtp = await Otp.findOne({
+		email,
+	}).sort({ createdAt: -1 });
+
+	if (!latestOtp) {
+		return res.status(400).json({
+			error: true,
+			message: 'OTP is invalid or expired. Please try again.',
+			data: null,
+		});
+	}
+
+	if (latestOtp.otp !== otp) {
+		return res.status(400).json({
+			error: true,
+			message: 'OTP is invalid or expired. Please try again.',
+			data: null,
+		});
+	}
+
+	// update user verified to true
+
+	const updateUserToVerifiedResponse = await updateUser(email, user.name, true);
+
+	if (updateUserToVerifiedResponse.error) {
+		return res.status(400).json(updateUserToVerifiedResponse);
+	}
+
+	return res.status(200).json({
+		error: false,
+		message: 'User verified',
+		data: user.userToken,
 	});
 });
 
