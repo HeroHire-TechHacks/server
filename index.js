@@ -22,6 +22,14 @@ const Otp = require('./src/schema/otps');
 const { sendEmail } = require('./src/utils/sendEmail');
 const { verifyAuth } = require('./src/utils/authMiddleware');
 const { createMeet, startMeet, endMeet } = require('./src/dals/meets');
+const {
+	conversationLimitMiddleware,
+} = require('./src/utils/conversationLimitMiddleware');
+const {
+	generateFirstMessage,
+	saveUserConversation,
+	generateNextMessage,
+} = require('./src/dals/conversation');
 
 const app = express();
 
@@ -373,6 +381,78 @@ app.post('/start-meet', verifyAuth, async (req, res) => {
 
 	return res.status(response.error ? 400 : 200).json(response);
 });
+
+app.post(
+	'/first-message',
+	[verifyAuth, conversationLimitMiddleware],
+	async (req, res) => {
+		let { meetCode } = req.body;
+
+		meetCode = typeof meetCode === 'string' && meetCode?.trim();
+
+		if (!meetCode) {
+			return res.status(400).json({
+				error: true,
+				message: 'Some error. Please try again later.',
+				data: null,
+			});
+		}
+
+		const response = await generateFirstMessage(req.user, meetCode);
+
+		return res.status(response.error ? 400 : 200).json(response);
+	}
+);
+
+app.post('/save-conversation', verifyAuth, async (req, res) => {
+	let { base64Audio, meetCode } = req.body;
+	const user = req.user;
+
+	base64Audio = typeof base64Audio === 'string' && base64Audio?.trim();
+	meetCode = typeof meetCode === 'string' && meetCode?.trim();
+
+	if (!meetCode) {
+		return res.status(400).json({
+			error: true,
+			message: 'Some error. Please try again later.',
+			data: null,
+		});
+	}
+
+	if (!base64Audio) {
+		return res.status(400).json({
+			error: true,
+			message: 'Audio is required.',
+			data: null,
+		});
+	}
+
+	const response = await saveUserConversation(user, meetCode, base64Audio);
+
+	return res.status(response.error ? 400 : 200).json(response);
+});
+
+app.post(
+	'/next-message',
+	[verifyAuth, conversationLimitMiddleware],
+	async (req, res) => {
+		let { meetCode } = req.body;
+
+		meetCode = typeof meetCode === 'string' && meetCode?.trim();
+
+		if (!meetCode) {
+			return res.status(400).json({
+				error: true,
+				message: 'Some error. Please try again later.',
+				data: null,
+			});
+		}
+
+		const response = await generateNextMessage(req.user, meetCode);
+
+		return res.status(response.error ? 400 : 200).json(response);
+	}
+);
 
 app.use((err, _req, res, _next) => {
 	errorLogger(err);
